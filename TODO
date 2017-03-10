@@ -1,0 +1,6 @@
+1. Acknowledge Kyle and Rich's work on a similar dockerfile.
+2. Replace default.cfg with sed instructions to edit the default.cfg from the cloned pycsw.
+3. Migrate from sqlite3 to PostGRES (as an include file).
+4. Create include files for both firewalld and iptables.
+5. Create include files for fail2ban (for both firewalld and iptables).
+6. Create include file for installing pycsw as a systemd service.
