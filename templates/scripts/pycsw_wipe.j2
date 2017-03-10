@@ -1,0 +1,5 @@
+#!{{ csw.shell }}
+
+source activate {{ conda.environment.name }} && \
+cd {{ git.dest }} && \
+python bin/pycsw-admin.py -c delete_records -f default.cfg -y

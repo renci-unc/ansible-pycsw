@@ -1,0 +1,41 @@
+---
+
+conda:
+  archive: "https://repo.continuum.io/archive"
+  type: Anaconda
+  installer:
+    shell: /bin/bash
+    version: 3
+    extension: sh
+    location: /root
+  version: "4.3.0"
+  platform: Linux-x86_64
+  location: /opt/conda
+  shell: /bin/bash
+  environment:
+    version: "3.5"
+    name: pycsw
+    specs: anaconda
+
+git:
+  repo: "http://github.com/geopython/pycsw.git"
+  dest: /opt/pycsw
+  version: master
+
+csw:
+  user: ees
+  group: storage-ees
+  home: /var/opt/pycsw
+  shell: /bin/bash
+
+gunicorn:
+  ip: "0.0.0.0"
+  port: 8000
+  workers: 4
+  access_logfile: "-"
+  error_logfile: "-"
+  application:
+    module: pycsw.wsgi
+    callable: application
+
+...

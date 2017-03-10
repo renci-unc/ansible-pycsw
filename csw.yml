@@ -1,0 +1,227 @@
+---
+
+- hosts: csw
+  vars_files:
+    - variables/csw-setup.yml
+  vars:
+    conda_installer: "{{ conda.type }}{{ conda.installer.version }}-{{ conda.version }}-{{ conda.platform }}.{{ conda.installer.extension }}"
+    conda_executable: "{{ conda.location }}/bin/conda"
+  remote_user: root
+  tasks:
+  - name: remove conda env from profile
+    file:
+    args:
+      path: /etc/profile.d/conda.sh
+      state: absent
+
+  - name: update all
+    yum:
+    args:
+      name: '*'
+      state: latest
+
+  - name: install prereqs
+    yum:
+    args:
+      name:
+        - binutils
+        - gcc
+        - gcc-c++
+        - make
+        - openssl-devel
+        - bzip2
+        - ca-certificates
+        - git
+        - glib2
+        - libSM
+        - libXext
+        - libXrender
+        - pwgen
+        - wget
+
+  - name: fetch anaconda
+    get_url:
+    args:
+      url: "{{ conda.archive }}/{{ conda_installer }}"
+      dest: "{{ conda.installer.location }}/{{ conda_installer }}"
+
+  - name: install anaconda
+    shell: >
+      "{{ conda.installer.shell }}"
+      "{{ conda.installer.location }}/{{ conda_installer }}"
+      -b -p "{{ conda.location }}"
+    args:
+      executable: "{{ conda.installer.shell }}"
+      creates: "{{ conda.location }}"
+
+  - name: alter PATH to include conda/bin
+    template:
+    args:
+      src: templates/profile-d-conda-sh-1.j2
+      dest: /etc/profile.d/conda.sh
+
+  - name: is conda-build installed?
+    shell: >
+      which conda-build
+    ignore_errors: yes
+    register: conda_build
+    args:
+      executable: "{{ csw.shell }}"
+
+  - name: install conda-build in conda root
+    shell: >
+      "{{ conda_executable }}" install -y \
+        conda-build \
+        && \
+        "{{ conda_executable }}" clean -a -y
+    when: "'no conda-build in' in conda_build.stderr"
+    args:
+      executable: "{{ conda.shell }}"
+
+  - name: configure conda
+    shell: >
+      "{{ conda_executable }}"  config \
+          --set always_yes yes \
+          --set changeps1 no \
+          --set show_channel_urls True \
+          && \
+      "{{ conda_executable }}" config \
+          --add channels conda-forge \
+          && \
+      "{{ conda_executable }}" clean -a -y
+    args:
+      executable: "{{ conda.shell }}"
+
+  - name: create conda environment
+    shell: >
+      "{{ conda_executable }}" create
+      -n "{{ conda.environment.name }}"
+      python="{{ conda.environment.version }}"
+      "{{ conda.environment.specs }}"
+    args:
+      executable: "{{ conda.shell }}"
+      creates: "{{ conda.location }}/envs/{{ conda.environment.name }}"
+
+  - name: alter PATH to include conda env
+    template:
+    args:
+      src: templates/profile-d-conda-sh-2.j2
+      dest: /etc/profile.d/conda.sh
+
+  - name: clone pycsw
+    git:
+    args:
+      repo: "{{ git.repo }}"
+      dest: "{{ git.dest }}"
+      version: "{{ git.version }}"
+
+  - name: install requirements
+    shell: >
+      conda install -y \
+        --file requirements.txt \
+        --file requirements-standalone.txt \
+        gunicorn \
+        libxml2==2.9.3 \
+        && \
+        conda clean -a -y
+    args:
+      executable: "{{ conda.shell }}"
+      chdir: "{{ git.dest }}"
+
+  - name: install pycsw
+    shell: conda develop .
+    args:
+      executable: "{{ conda.shell }}"
+      chdir: "{{ git.dest }}"
+
+  - name: install default.cfg
+    template:
+    args:
+      src: templates/default.j2
+      dest: "{{ git.dest }}/default.cfg"
+
+  - name: create group if not present
+    group:
+    args:
+      name: "{{ csw.group }}"
+      state: present
+
+  - name: create user if not present
+    user:
+    args:
+      name: "{{ csw.user }}"
+      home: "{{ csw.home }}"
+      group: "{{ csw.group }}"
+      system: yes
+      shell: "{{ csw.shell }}"
+      state: present
+
+  - name: create csw home directory if not present
+    file:
+    args:
+      path: "{{ csw.home }}"
+      owner: "{{ csw.user }}"
+      group: "{{ csw.group }}"
+      mode: 0700
+      state: directory
+
+  - name: change ownership of csw installation
+    command: >
+      chown -R {{ csw.user }}:{{ csw.group }} {{ git.dest }}
+
+  - name: create subdirectories if not present
+    file:
+    args:
+      path: "{{ csw.home }}/{{ item }}"
+      owner: "{{ csw.user }}"
+      group: "{{ csw.group }}"
+      mode: 0700
+      state: directory
+    with_items:
+      - database
+      - logs
+      - store
+      - force
+      - export
+
+  - name: install scripts
+    template:
+    args:
+      src: "templates/scripts/{{ item }}.j2"
+      dest: "/usr/local/bin/{{ item }}"
+      owner: root
+      group: root
+      mode: 0755
+    with_items:
+      - pycsw_export
+      - pycsw_load
+      - pycsw_setup
+      - pycsw_force
+      - pycsw_optimize
+      - pycsw_wipe
+
+  - name: create database
+    shell: >
+      runuser -s {{ csw.shell }} {{ csw.user }} -c "pycsw_setup 2>&1 | logger -s -t pycsw_setup"
+    args:
+      executable: "{{ csw.shell }}"
+
+  - name: install cron job
+    template:
+    args:
+      src: templates/cron.d/pycsw
+      dest: /etc/cron.d/pycsw
+      owner: root
+      group: root
+      mode: 0644
+ 
+  - name: install service script
+    template:
+    args:
+      src: "templates/pycsw-sh.j2"
+      dest: "/usr/local/bin/pycsw"
+      owner: root
+      group: root
+      mode: 0755
+
+...

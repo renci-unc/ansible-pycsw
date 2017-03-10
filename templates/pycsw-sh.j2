@@ -1,0 +1,11 @@
+#!{{ csw.shell }}
+
+source activate {{ conda.environment.name }} && \
+cd {{ git.dest }} && \
+runuser -s {{ csw.shell }} {{ csw.user }} -c "gunicorn \
+    -b {{ gunicorn.ip }}:{{ gunicorn.port }} \
+    -w {{ gunicorn.workers }} \
+    --access-logfile {{ gunicorn.access_logfile }}  \
+    --error-logfile {{ gunicorn.error_logfile }}  \
+    {{ gunicorn.application.module }}:{{ gunicorn.application.callable }} \
+    2>&1 | logger -s -t pycsw"

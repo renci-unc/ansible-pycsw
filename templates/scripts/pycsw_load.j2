@@ -1,0 +1,5 @@
+#!{{ csw.shell }}
+
+source activate {{ conda.environment.name }} && \
+cd {{ git.dest }} && \
+python bin/pycsw-admin.py -c load_records -r -f default.cfg -p "{{ csw.home }}/store"

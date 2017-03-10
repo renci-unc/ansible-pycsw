@@ -1,0 +1,14 @@
+SHELL={{ csw.shell }}
+PATH={{ conda.location }}/envs/{{ conda.environment.name }}/bin:{{ conda.location }}/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Force
+*/5 * * * * {{ csw.user }} pycsw_force 2>&1 | logger -t pycsw_force
+
+# Load
+15 */1 * * * {{ csw.user }} pycsw_load 2>&1 | logger -t pycsw_load
+
+# Optimize
+30 */1 * * * {{ csw.user }} pycsw_optimize 2>&1 | logger -t pycsw_optimize
+
+# Export
+45 */1 * * * {{ csw.user }} pycsw_export 2>&1 | logger -t pycsw_export
