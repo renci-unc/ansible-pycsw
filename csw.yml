@@ -5,7 +5,9 @@
     - variables/csw-setup.yml
   vars:
     conda_installer: "{{ conda.type }}{{ conda.installer.version }}-{{ conda.version }}-{{ conda.platform }}.{{ conda.installer.extension }}"
-    conda_executable: "{{ conda.location }}/bin/conda"
+    root_conda_executable: "{{ conda.location }}/bin/conda"
+    env_location: "{{ conda.location }}/envs/{{ conda.environment.name }}"
+    env_conda_executable: "{{ env_location }}/bin/conda"
   remote_user: root
   tasks:
   - name: remove conda env from profile
@@ -19,6 +21,7 @@
     args:
       name: '*'
       state: latest
+      skip_broken: yes
 
   - name: install prereqs
     yum:
@@ -60,7 +63,7 @@
       src: templates/profile-d-conda-sh-1.j2
       dest: /etc/profile.d/conda.sh
 
-  - name: is conda-build installed?
+  - name: is conda-build already installed?
     shell: >
       which conda-build
     ignore_errors: yes
@@ -70,33 +73,33 @@
 
   - name: install conda-build in conda root
     shell: >
-      "{{ conda_executable }}" install -y \
+      "{{ root_conda_executable }}" install -y \
         conda-build \
         && \
-        "{{ conda_executable }}" clean -a -y
+        "{{ root_conda_executable }}" clean -a -y
     when: "'no conda-build in' in conda_build.stderr"
     args:
       executable: "{{ conda.shell }}"
 
   - name: configure conda
     shell: >
-      "{{ conda_executable }}"  config \
+      "{{ root_conda_executable }}"  config \
           --set always_yes yes \
           --set changeps1 no \
           --set show_channel_urls True \
           && \
-      "{{ conda_executable }}" config \
+      "{{ root_conda_executable }}" config \
           --add channels conda-forge \
           && \
-      "{{ conda_executable }}" clean -a -y
+      "{{ root_conda_executable }}" clean -a -y
     args:
       executable: "{{ conda.shell }}"
 
   - name: create conda environment
     shell: >
-      "{{ conda_executable }}" create
+      "{{ root_conda_executable }}" create
       -n "{{ conda.environment.name }}"
-      python="{{ conda.environment.version }}"
+      "python={{ conda.environment.version }}"
       "{{ conda.environment.specs }}"
     args:
       executable: "{{ conda.shell }}"
@@ -117,19 +120,19 @@
 
   - name: install requirements
     shell: >
-      conda install -y \
+      "{{ env_conda_executable }}" install -y \
         --file requirements.txt \
         --file requirements-standalone.txt \
         gunicorn \
         libxml2==2.9.3 \
         && \
-        conda clean -a -y
+        "{{ env_conda_executable }}" clean -a -y
     args:
       executable: "{{ conda.shell }}"
       chdir: "{{ git.dest }}"
 
   - name: install pycsw
-    shell: conda develop .
+    shell: "{{ env_conda_executable }} develop ."
     args:
       executable: "{{ conda.shell }}"
       chdir: "{{ git.dest }}"
@@ -140,14 +143,37 @@
       src: templates/default.j2
       dest: "{{ git.dest }}/default.cfg"
 
+    # Bug in ansible getent module.
+    # Group may already exist externally.
+  - name: does group already exist?
+    shell: "getent group {{ csw.group }}"
+    ignore_errors: yes
+    register: getent_csw_group
+    args:
+      executable: "{{ csw.shell }}"
+
+    # No bug in group module state option for external group.
+    # But creating group with same genent stdout test as user.
   - name: create group if not present
     group:
+    when: csw.group not in getent_csw_group.stdout
     args:
       name: "{{ csw.group }}"
       state: present
 
-  - name: create user if not present
+    # Bug in ansible getent module for external user.
+    # User may already exist externally.
+  - name: does user already exist?
+    shell: "getent passwd {{ csw.user }}"
+    ignore_errors: yes
+    register: getent_csw_user
+    args:
+      executable: "{{ csw.shell }}"
+
+    # Bug in user module state option.
+  - name: create user if not present 
     user:
+    when: csw.user not in getent_csw_user.stdout
     args:
       name: "{{ csw.user }}"
       home: "{{ csw.home }}"
@@ -165,6 +191,8 @@
       mode: 0700
       state: directory
 
+    # File module checks for every FS object in tree.
+    # Takes too long for big trees.
   - name: change ownership of csw installation
     command: >
       chown -R {{ csw.user }}:{{ csw.group }} {{ git.dest }}
@@ -202,7 +230,7 @@
 
   - name: create database
     shell: >
-      runuser -s {{ csw.shell }} {{ csw.user }} -c "pycsw_setup 2>&1 | logger -s -t pycsw_setup"
+       runuser -s {{ csw.shell }} {{ csw.user }} -c "pycsw_setup 2>&1 | logger -s -t pycsw_setup"
     args:
       executable: "{{ csw.shell }}"
 

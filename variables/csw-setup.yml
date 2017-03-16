@@ -8,7 +8,7 @@ conda:
     version: 3
     extension: sh
     location: /root
-  version: "4.3.0"
+  version: "4.3.1"
   platform: Linux-x86_64
   location: /opt/conda
   shell: /bin/bash
@@ -23,7 +23,7 @@ git:
   version: master
 
 csw:
-  user: ees
+  user: csw-service
   group: storage-ees
   home: /var/opt/pycsw
   shell: /bin/bash
