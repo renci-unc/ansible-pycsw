@@ -1,5 +1,7 @@
 ---
 
+# Requires ansible>=2.3.0.
+
 - hosts: csw
   vars_files:
     - variables/csw-setup.yml
